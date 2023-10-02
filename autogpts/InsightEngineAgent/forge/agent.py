@@ -122,24 +122,52 @@ class ForgeAgent(Agent):
         multiple steps. Returning a request to continue in the step output, the user can then decide
         if they want the agent to continue or not.
         """
-        # An example that
+        # Get task to access task_input
+        task = await self.db.get_task(task_id)
+        
+        # Create new step in database
         step = await self.db.create_step(
             task_id=task_id, input=step_request, is_last=True
         )
-
-        self.workspace.write(task_id=task_id, path="output.txt", data=b"Washington D.C")
-
-
-        await self.db.create_artifact(
-            task_id=task_id,
-            step_id=step.step_id,
-            file_name="output.txt",
-            relative_path="",
-            agent_created=True,
-        )
         
-        step.output = "Washington D.C"
-
-        LOG.info(f"\t✅ Final Step completed: {step.step_id}")
-
+        # loads the prompt engine with gpt-3.5-turbo templates
+        prompt_engine = PromptEngine("gpt-3.5-turbo")
+        
+        # creates prompt for response format
+        system_prompt = prompt_engine.load_prompt("system-format")
+        
+        # specify task parameters
+        task_kwargs = {
+            "task": task.input,
+            "abilities": self.abilities.list_abilities_for_prompt(),
+        }
+        
+        # load task prompt with parameters
+        task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
+        
+        # messages list
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task_prompt}
+        ]
+        
+        try:
+            # define the parameters for chat completion request
+            chat_completion_kwargs = {
+                "messages": messages,
+                "model": "gpt-3.5-turbo",
+            }
+            # make chat completion request and parse response
+            chat_response = await chat_completion_request(**chat_completion_kwargs)
+            answer = json.loads(chat_response["choices"][0]["message"]["content"])
+            
+            # Logs the answer
+            LOG.info(pprint.pformat(answer))
+        except json.JSONDecodeError as e:
+            # Handling JSON Decoding errors
+            LOG.error(f"Unable to decode chat response: {chat_response}")
+        except Exception as e:
+            # Handling other exceptions
+            LOG.error(f"Unable to generate chat response: {e}")
+        
         return step
