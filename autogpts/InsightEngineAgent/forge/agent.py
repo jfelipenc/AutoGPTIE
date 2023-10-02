@@ -160,7 +160,6 @@ class ForgeAgent(Agent):
             # make chat completion request and parse response
             chat_response = await chat_completion_request(**chat_completion_kwargs)
             answer = json.loads(chat_response["choices"][0]["message"]["content"])
-            
             # Logs the answer
             LOG.info(pprint.pformat(answer))
         except json.JSONDecodeError as e:
@@ -169,5 +168,13 @@ class ForgeAgent(Agent):
         except Exception as e:
             # Handling other exceptions
             LOG.error(f"Unable to generate chat response: {e}")
+            
+        # extracts the ability required to execute the step
+        ability = answer["ability"]
+        # run the ability and get the output
+        output = await self.abilities.run_ability(
+            task_id, ability["name"], **ability["args"]
+        )
+        step.output = answer["thoughts"]["speak"]
         
         return step
