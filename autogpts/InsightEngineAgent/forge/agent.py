@@ -164,7 +164,8 @@ class ForgeAgent(Agent):
             LOG.info(pprint.pformat(answer))
         except json.JSONDecodeError as e:
             # Handling JSON Decoding errors
-            LOG.error(f"Unable to decode chat response: {chat_response}")
+            LOG.error(f"""Unable to decode chat response: {chat_response}
+                      failed with error {e}""")
         except Exception as e:
             # Handling other exceptions
             LOG.error(f"Unable to generate chat response: {e}")
@@ -178,3 +179,4 @@ class ForgeAgent(Agent):
         step.output = answer["thoughts"]["speak"]
         
         return step
+    
