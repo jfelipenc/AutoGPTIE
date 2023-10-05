@@ -1,5 +1,6 @@
 import json
 import pprint
+import datetime
 
 from forge.sdk import (
     Agent,
@@ -87,7 +88,53 @@ class ForgeAgent(Agent):
 
         We are hooking into function to add a custom log message. Though you can do anything you
         want here.
+        
+        # version 2023-10-04
+        Adding planning LLM call to outline task steps beforehand. 
+        Hoping to reduce strain and erros in step execution.
         """
+        # object for storing steps sequences
+        task_additional_input = {}
+        
+        # loads prompt engine
+        prompt_engine = PromptEngine("gpt-3.5-turbo")
+        
+        # creates prompt for response format
+        system_prompt = prompt_engine.load_prompt('plan-system-format')
+        
+        # specify task-planning prompt parameters
+        task_kwargs = {
+            "date": str(datetime.date.today()),
+            "task": task_request.input,
+            "abilities": self.abilities.list_abilities_for_prompt()
+        }
+        
+        # load task-planning prompt with params
+        task_prompt = prompt_engine.load_prompt('task-plan-step', **task_kwargs)
+        
+        # messages list
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task_prompt}
+        ]
+        
+        # try getting planning from llm
+        try:
+            chat_completion_kwargs = {
+                "messages": messages,
+                "model": "gpt-3.5-turbo"
+            }           
+            # make chat completion request and parse response
+            chat_response = await chat_completion_request(**chat_completion_kwargs) 
+            answer = json.loads(chat_response["choices"][0]["message"]["content"])
+            
+            # Logging the answer as info for further analysis
+            LOG.info(f"The planning agent answer for this task was: {pprint.pformat(answer)}")
+        except json.JSONDecodeError as e:
+            LOG.error(f"Unable to decode planning llm response f{chat_response} with error {e}")
+        except Exception as e:
+            LOG.error(f"Unable to get model's response due to {e}")
+        
         task = await super().create_task(task_request)
         LOG.info(
             f"📦 Task created: {task.task_id} input: {task.input[:40]}{'...' if len(task.input) > 40 else ''}"
