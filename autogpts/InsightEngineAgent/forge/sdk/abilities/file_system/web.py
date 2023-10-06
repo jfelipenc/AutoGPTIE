@@ -58,18 +58,12 @@ async def fetch_write_webpage(agent, task_id: str, url: str, filepath: str):
     await write_file(agent, task_id, filepath, content)
     
 @ability(
-    name="search_retrieve_result",
+    name="search_query",
     description="Search the web for a query and retrieve the content of first webpage found and write it to a .txt file. Use this if no URL was given.",
     parameters=[
         {
             "name": "search_query",
             "description": "Desired query to search for using search engine",
-            "type": "string",
-            "required": True
-        },
-        {
-            "name": "file_path",
-            "description": "Path to output TXT file",
             "type": "string",
             "required": True
         },
@@ -80,9 +74,9 @@ async def fetch_write_webpage(agent, task_id: str, url: str, filepath: str):
             "required": False
         }
     ],
-    output_type="None"
+    output_type="list"
 )
-async def search_retrieve_result(agent, task_id: str, search_query: str, file_path: str, search_engine: str = "Brave"):
+async def search_query(agent, task_id: str, search_query: str, search_engine: str = "Brave"):
     # Engines specifications
     engines = {
         "Brave": {
@@ -114,11 +108,10 @@ async def search_retrieve_result(agent, task_id: str, search_query: str, file_pa
     response = requests.get(url, headers=headers, params=params)
     json_response = response.json()
     print(f"GET responses for {search_query}")
-    print(str(json_response))
     
-    # retrieves first url
-    search_result_url = json_response['web']['results'][0]['url']
+    # retrieves first 3 urls
+    search_result_url = json_response['web']['results'][0:3]
     
-    # write content of first url to file_path
-    await fetch_write_webpage(agent, task_id, url=search_result_url, filepath=file_path)
-    print(f"Done writing to output file {file_path}")
+    urls = [result['url'] for result in search_result_url]
+
+    return urls

@@ -1,14 +1,18 @@
 {% extends "techniques/expert.j2" %}
 {% block expert %}Planner{% endblock %}
 {% block prompt %}
-Your task is:
+Today is {{ date }}. Your task is:
 
 {{ task }}
+
+We're at the current step {{ step }}. Previous step outputs are below:
+
+{{ steps_outputs }}
 
 Answer in the provided format.
 
 Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and
-pursue simple strategies with no legal complications.
+pursue simple strategies with no legal complications. You should also decide if this step ends the task or not by using the is_last field.
 
 {% if constraints %}
 ## Constraints

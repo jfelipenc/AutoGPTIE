@@ -79,6 +79,23 @@ class ForgeAgent(Agent):
         Feel free to create subclasses of the database and workspace to implement your own storage
         """
         super().__init__(database, workspace)
+        
+    async def create_next_step(self, task_id: str, input, additional_input, is_last=True) -> Step: 
+        step_request = await self.create_step_request(input, additional_input)
+        
+        next_step_exec = await self.execute_step(task_id, step_request)
+        
+        return next_step_exec
+    
+    async def create_step_request(self, input: str, additional_input: dict):
+        if additional_input is None:
+            additional_input = {}
+            
+        step_request = StepRequestBody()
+        step_request.input = input
+        step_request.additional_input = additional_input
+        
+        return step_request
 
     async def create_task(self, task_request: TaskRequestBody) -> Task:
         """
@@ -93,9 +110,6 @@ class ForgeAgent(Agent):
         Adding planning LLM call to outline task steps beforehand. 
         Hoping to reduce strain and erros in step execution.
         """
-        # object for storing steps sequences
-        task_additional_input = {}
-        
         # loads prompt engine
         prompt_engine = PromptEngine("gpt-3.5-turbo")
         
@@ -135,10 +149,13 @@ class ForgeAgent(Agent):
         except Exception as e:
             LOG.error(f"Unable to get model's response due to {e}")
         
+        # adding additional_input to task
+        task_request.additional_input = answer['step']
         task = await super().create_task(task_request)
         LOG.info(
             f"📦 Task created: {task.task_id} input: {task.input[:40]}{'...' if len(task.input) > 40 else ''}"
         )
+        
         return task
 
     async def execute_step(self, task_id: str, step_request: StepRequestBody) -> Step:
@@ -172,9 +189,25 @@ class ForgeAgent(Agent):
         # Get task to access task_input
         task = await self.db.get_task(task_id)
         
+        # Get steps of task
+        steps = await self.db.list_steps(task_id)
+        
+        # Gets step request additional inputs
+        if steps[0] or len(steps[0]) > 1:
+            try:
+                LOG.info("Retrieving additional input from step.")
+                additional_input = step_request.additional_input
+            except Exception as e:
+                LOG.error(f"Error processing additional input for step: {e}")
+        else:
+            LOG.info("First step in task identified. Importing task additional inputs...")
+            additional_input = task.additional_input
+        
+        is_last = additional_input["is_last"] if "is_last" in additional_input.keys() else False
+        
         # Create new step in database
         step = await self.db.create_step(
-            task_id=task_id, input=step_request, is_last=True
+            task_id=task_id, input=step_request, additional_input=additional_input, is_last=is_last
         )
         
         # loads the prompt engine with gpt-3.5-turbo templates
@@ -185,12 +218,20 @@ class ForgeAgent(Agent):
         
         # specify task parameters
         task_kwargs = {
+            "date": str(datetime.date.today()),
             "task": task.input,
+            "step": step.input,
+            "steps_outputs": step.output,#additional_input["output"] if "output" in list(additional_input.keys()) else "No output so far",
             "abilities": self.abilities.list_abilities_for_prompt(),
         }
         
+        LOG.info(f"Steps outputs so far: {additional_input['output'] if 'output' in list(additional_input.keys()) else ''}")
+        LOG.info(f"Step output: {step.output}")
+        
         # load task prompt with parameters
         task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
+        
+        LOG.info(f"Task prompt template: {task_prompt}")
         
         # messages list
         messages = [
@@ -223,7 +264,12 @@ class ForgeAgent(Agent):
         output = await self.abilities.run_ability(
             task_id, ability["name"], **ability["args"]
         )
-        step.output = answer["thoughts"]["speak"]
+        step.output = output#answer["thoughts"]["speak"]
         
+        if not ability["is_last"]:
+            # just testing
+            LOG.info("Starting next step in chain!")
+            next_step = await self.create_next_step(task_id, step.input, additional_input={"output": step.output})
+        
+        LOG.info(f"Finished execution with output: {step.output}")
         return step
-    
