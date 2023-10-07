@@ -2,6 +2,8 @@ import json
 import pprint
 import datetime
 
+import tiktoken
+
 from forge.sdk import (
     Agent,
     AgentDB,
@@ -99,6 +101,17 @@ class ForgeAgent(Agent):
         )
         return task
     
+    async def check_and_trim_message(self, message: str) -> str:
+        enc = tiktoken.encoding_for_model('gpt-3.5-turbo')
+        num_tokens = len(enc.encode(message))
+        if num_tokens >= 4097:
+            excess = num_tokens - 4097
+            while num_tokens >= 4097:
+                split_by = int(excess / 3)
+                message = message[:split_by]
+        return message
+        
+    
     async def make_chat_completion(self, messages: list) -> dict:
         answer = {}
         try:
@@ -177,44 +190,63 @@ class ForgeAgent(Agent):
         LOG.info(f"ORIGINAL STEP REQUEST BODY: {step_request}")
         # ==== STEP EXECUTION ====
         for i, dict_step_request in enumerate(planned_steps):
-            step_request = StepRequestBody(input=dict_step_request["input"],
-                                           additional_input=dict_step_request["additional_input"])
-            LOG.info(f"Executing step #{i+1} with body: {step_request}")
-            
-            is_last = True if i+1 == len(planned_steps) else False
-            # Create new step in database
-            step = await self.db.create_step(
-                task_id=task_id, input=step_request, is_last=is_last
-            )
-            
-            # creates prompt for response format
-            system_prompt = prompt_engine.load_prompt("system-format")
-            
-            # specify task parameters
-            task_kwargs = {
-                "task": step_request.input,
-                "abilities": self.abilities.list_abilities_for_prompt(),
-            }
-            
-            # load task prompt with parameters
-            task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
-            
-            # messages list
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": task_prompt}
-            ]
-            
-            answer = await self.make_chat_completion(messages)
+            successful = False
+            n_exec = 0
+            while not successful and n_exec < 3:
+                step_request = StepRequestBody(input=dict_step_request["input"],
+                                            additional_input=dict_step_request["additional_input"])
+                LOG.info(f"Executing step #{i+1} with body: {step_request}")
                 
-            # extracts the ability required to execute the step
-            ability = answer["ability"]
-            # run the ability and get the output
-            output = await self.abilities.run_ability(
-                task_id, ability["name"], **ability["args"]
-            )
-            step.output = answer["thoughts"]["speak"]
-            LOG.info(f"Finished executing step #{i+1}. Agent output: {step.output}")
-            
+                is_last = True if i+1 == len(planned_steps) else False
+                # Create new step in database
+                step = await self.db.create_step(
+                    task_id=task_id, input=step_request, is_last=is_last
+                )
+                
+                # creates prompt for response format
+                system_prompt = prompt_engine.load_prompt("system-format")
+                
+                # specify task parameters
+                task_kwargs = {
+                    "task": step_request.input,
+                    "additional_input": step_request.additional_input,
+                    "abilities": self.abilities.list_abilities_for_prompt(),
+                }
+                
+                # load task prompt with parameters
+                task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
+                
+                # messages list
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": await self.check_and_trim_message(task_prompt)}
+                ]
+                
+                answer = await self.make_chat_completion(messages)
+                    
+                # extracts the ability required to execute the step
+                try:
+                    ability = answer["ability"]
+                    # run the ability and get the output
+                    output = await self.abilities.run_ability(
+                        task_id, ability["name"], **ability["args"]
+                    )
+                    try:
+                        step.output = answer["thoughts"]["speak"]
+                    except Exception as e:
+                        step.output = answer
+                    LOG.info(f"Finished executing step #{i+1}. Agent output: {step.output}")
+                    if i < len(planned_steps):
+                        LOG.info(f"Adding output to next step additional input.")
+                        planned_steps[i+1]["additional_input"]["previous_step_output"] = output
+                    successful = True
+                except Exception as e:
+                    n_exec += 1
+                    LOG.warning(f"Failed executing the step #{i+1} due to error {e}.\n Trying again ({n_exec}).")
+            if n_exec == 3 and not successful:
+                LOG.error(f"Failed execution of step {i+1}. Ending now.")
+                return None
+        if is_last:
+            LOG.info(f"Finished execution of step {i+1}.")
         return step
     
