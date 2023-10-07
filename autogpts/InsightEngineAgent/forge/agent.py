@@ -192,10 +192,14 @@ class ForgeAgent(Agent):
         for i, dict_step_request in enumerate(planned_steps):
             successful = False
             n_exec = 0
+            error_info = ""
             while not successful and n_exec < 3:
                 step_request = StepRequestBody(input=dict_step_request["input"],
                                             additional_input=dict_step_request["additional_input"])
                 LOG.info(f"Executing step #{i+1} with body: {step_request}")
+                
+                if error_info != "":
+                    step_request.additional_input["error_info"] = error_info
                 
                 is_last = True if i+1 == len(planned_steps) else False
                 # Create new step in database
@@ -239,9 +243,13 @@ class ForgeAgent(Agent):
                     if i < len(planned_steps):
                         LOG.info(f"Adding output to next step additional input.")
                         planned_steps[i+1]["additional_input"]["previous_step_output"] = output
+                    
+                    # Setting variables for retry logic
+                    error_info = ""
                     successful = True
                 except Exception as e:
                     n_exec += 1
+                    error_info = str(e)
                     LOG.warning(f"Failed executing the step #{i+1} due to error {e}.\n Trying again ({n_exec}).")
             if n_exec == 3 and not successful:
                 LOG.error(f"Failed execution of step {i+1}. Ending now.")
