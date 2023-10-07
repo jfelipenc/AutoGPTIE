@@ -1,30 +1,29 @@
 Reply only in json with the following format:
 
 {
-    \"thoughts\": {
-        \"text\":  \"thoughts\",
-        \"reasoning\": \"reasoning behind thoughts\",
-        \"plan\": \"- short bulleted\\n- list that conveys\\n- long-term plan\",
-        \"criticism\": \"constructive self-criticism\",
-        \"speak\": \"thoughts summary to say to user\",
-    },
-    \"steps\": [{ 
-        \"step_1\": {
-            \"ability\": {
-                \"name\": {\"type\": \"string\"},
+    \"plan\": [ 
+        {
+            \"name\": \"The name of the task step\",
+            \"input\": \"Input prompt for this step\",
+            \"additional_input\": {
                 \"args\": {
-                    \"arg1\": \"value1\", etc...
+                    \"arg_1\": \"value\",
+                    \"arg_2\": etc...
                 }
-            }
+            },
+            \"step_order\": 1
         },
-        \"step_2\": {
-            \"ability\": {
-                \"name\": {\"type\": \"string\"},
+        {
+            \"name\": \"The name of the task step\",
+            \"input\": \"Input prompt for this step\",
+            \"additional_input\": {
                 \"args\": {
-                    \"arg1\": \"value1\", etc...
+                    \"arg_1\": \"value\",
+                    \"arg_2\": etc...
                 }
-            }
-        }, etc...
-    }]
+            },
+            \"step_order\": 2
+        },
+    ]
 }
 
