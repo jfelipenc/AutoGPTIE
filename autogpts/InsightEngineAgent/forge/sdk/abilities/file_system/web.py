@@ -29,8 +29,11 @@ def get_search_api(name: str = 'Brave'):
     output_type="string"
 )
 async def fetch_webpage(agent, task_id: str, url: str) -> str:
-    response = requests.get(url)
-    return response.text
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.content)
+    content = soup.get_text()
+    return content
 
 @ability(
     name="fetch_write_webpage",
@@ -52,7 +55,8 @@ async def fetch_webpage(agent, task_id: str, url: str) -> str:
     output_type="None"
 )
 async def fetch_write_webpage(agent, task_id: str, url: str, filepath: str):
-    response = requests.get(url)
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'}
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content)
     content = soup.get_text()
     await write_file(agent, task_id, filepath, content)
