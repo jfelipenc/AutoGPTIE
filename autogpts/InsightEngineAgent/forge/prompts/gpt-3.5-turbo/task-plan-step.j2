@@ -7,7 +7,8 @@ The current date is {{ date }}. Your task is:
 
 Answer in the provided format.
 
-Your job is to create a plan outlining all necessary steps for the execution of the given task with the current abilities available.
+Your job is to create a plan outlining all necessary steps for the execution of the given task with the current abilities available. Remember that you should provide
+a list of steps that are achievable through the current abilities and split into one action per step. Your output will be consumed by another LLM that will create the steps.
 
 {% if constraints %}
 ## Constraints
