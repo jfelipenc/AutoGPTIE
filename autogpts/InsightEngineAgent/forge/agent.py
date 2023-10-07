@@ -98,7 +98,30 @@ class ForgeAgent(Agent):
             f"📦 Task created: {task.task_id} input: {task.input[:40]}{'...' if len(task.input) > 40 else ''}"
         )
         return task
-
+    
+    async def make_chat_completion(self, messages: list) -> dict:
+        answer = {}
+        try:
+            # define the parameters for chat completion request
+            chat_completion_kwargs = {
+                "messages": messages,
+                "model": "gpt-3.5-turbo",
+            }
+            # make chat completion request and parse response
+            chat_response = await chat_completion_request(**chat_completion_kwargs)
+            answer = json.loads(chat_response["choices"][0]["message"]["content"])
+            # Logs the answer
+            LOG.info(f"Answer: {pprint.pformat(answer)}")
+        except json.JSONDecodeError as e:
+            # Handling JSON Decoding errors
+            LOG.error(f"""Unable to decode chat response: {chat_response}
+                      failed with error {e}""")
+        except Exception as e:
+            # Handling other exceptions
+            LOG.error(f"Unable to generate chat response: {e}")
+            
+        return answer
+    
     async def execute_step(self, task_id: str, step_request: StepRequestBody) -> Step:
         """
         For a tutorial on how to add your own logic please see the offical tutorial series:
@@ -130,58 +153,68 @@ class ForgeAgent(Agent):
         # Get task to access task_input
         task = await self.db.get_task(task_id)
         
-        # Create new step in database
-        step = await self.db.create_step(
-            task_id=task_id, input=step_request, is_last=True
-        )
-        
         # loads the prompt engine with gpt-3.5-turbo templates
         prompt_engine = PromptEngine("gpt-3.5-turbo")
         
-        # creates prompt for response format
-        system_prompt = prompt_engine.load_prompt("system-format")
-        
-        # specify task parameters
-        task_kwargs = {
+        # planner response format
+        planner_format = prompt_engine.load_prompt('plan-system-format')
+        # instructions format
+        task_plan_kwargs = {
+            "date": str(datetime.date.today()),
             "task": task.input,
-            "abilities": self.abilities.list_abilities_for_prompt(),
+            "abilities": self.abilities.list_abilities_for_prompt()
         }
-        
-        # load task prompt with parameters
-        task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
-        
-        # messages list
+        task_plan = prompt_engine.load_prompt('task-plan-step', **task_plan_kwargs)
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": task_prompt}
+            {"role": "system", "content": planner_format},
+            {"role": "user", "content": task_plan}
         ]
         
-        try:
-            # define the parameters for chat completion request
-            chat_completion_kwargs = {
-                "messages": messages,
-                "model": "gpt-3.5-turbo",
-            }
-            # make chat completion request and parse response
-            chat_response = await chat_completion_request(**chat_completion_kwargs)
-            answer = json.loads(chat_response["choices"][0]["message"]["content"])
-            # Logs the answer
-            LOG.info(pprint.pformat(answer))
-        except json.JSONDecodeError as e:
-            # Handling JSON Decoding errors
-            LOG.error(f"""Unable to decode chat response: {chat_response}
-                      failed with error {e}""")
-        except Exception as e:
-            # Handling other exceptions
-            LOG.error(f"Unable to generate chat response: {e}")
-            
-        # extracts the ability required to execute the step
-        ability = answer["ability"]
-        # run the ability and get the output
-        output = await self.abilities.run_ability(
-            task_id, ability["name"], **ability["args"]
-        )
-        step.output = answer["thoughts"]["speak"]
+        # creating steps
+        plan_answer = await self.make_chat_completion(messages)
+        planned_steps = plan_answer["plan"]
         
+        LOG.info(f"ORIGINAL STEP REQUEST BODY: {step_request}")
+        # ==== STEP EXECUTION ====
+        for i, dict_step_request in enumerate(planned_steps):
+            step_request = StepRequestBody(input=dict_step_request["input"],
+                                           additional_input=dict_step_request["additional_input"])
+            LOG.info(f"Executing step #{i+1} with body: {step_request}")
+            
+            is_last = True if i+1 == len(planned_steps) else False
+            # Create new step in database
+            step = await self.db.create_step(
+                task_id=task_id, input=step_request, is_last=is_last
+            )
+            
+            # creates prompt for response format
+            system_prompt = prompt_engine.load_prompt("system-format")
+            
+            # specify task parameters
+            task_kwargs = {
+                "task": step_request.input,
+                "abilities": self.abilities.list_abilities_for_prompt(),
+            }
+            
+            # load task prompt with parameters
+            task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
+            
+            # messages list
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": task_prompt}
+            ]
+            
+            answer = await self.make_chat_completion(messages)
+                
+            # extracts the ability required to execute the step
+            ability = answer["ability"]
+            # run the ability and get the output
+            output = await self.abilities.run_ability(
+                task_id, ability["name"], **ability["args"]
+            )
+            step.output = answer["thoughts"]["speak"]
+            LOG.info(f"Finished executing step #{i+1}. Agent output: {step.output}")
+            
         return step
     
