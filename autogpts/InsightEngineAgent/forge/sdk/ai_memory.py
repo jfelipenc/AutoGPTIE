@@ -1,7 +1,7 @@
 import os
 import weaviate
 
-from forge.sdk import ForgeLogger
+from .forge_log import ForgeLogger
 
 LOG = ForgeLogger(__name__)
 
@@ -136,15 +136,21 @@ class AgentVectorDB:
         auth_config = weaviate.AuthApiKey(api_key=WEAVIATE_API_KEY)
         self.client = weaviate.Client(
             url=url,
-            auth_client_secret=auth_config
+            auth_client_secret=auth_config,
+            additional_headers={
+                "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")
+            }
         )
         self.create_system_schemas()
 
     def create_system_schemas(self):
         schemas = self.client.schema.get()
         for schema in SYSTEM_SCHEMAS:
-            if not self.client.schema.contains(schema):
-                self.client.schema.create(schema)
+            if schema not in schemas["classes"]:
+                try:
+                    self.client.schema.create_class(schema)
+                except Exception as e:
+                    LOG.warning(f"Failed creating system schemas due to {e}")
     
     async def create_task(self, task_id: str, task_name: str = "", task_input: str = "", task_additional_input: str = "", created_at: str = ""):
         task = {
