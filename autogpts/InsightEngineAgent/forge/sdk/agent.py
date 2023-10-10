@@ -13,6 +13,7 @@ from hypercorn.config import Config
 
 from .abilities.registry import AbilityRegister
 from .db import AgentDB
+from .ai_memory import AgentVectorDB
 from .errors import NotFoundError
 from .forge_log import ForgeLogger
 from .middlewares import AgentMiddleware
@@ -24,8 +25,9 @@ LOG = ForgeLogger(__name__)
 
 
 class Agent:
-    def __init__(self, database: AgentDB, workspace: Workspace):
+    def __init__(self, database: AgentDB, vector_db: AgentVectorDB, workspace: Workspace):
         self.db = database
+        self.vectordb = vector_db
         self.workspace = workspace
         self.abilities = AbilityRegister(self)
 
@@ -93,6 +95,12 @@ class Agent:
             task = await self.db.create_task(
                 input=task_request.input,
                 additional_input=task_request.additional_input,
+            )
+            await self.vectordb.create_task(
+                task_id=task.task_id,
+                task_input=task.input,
+                task_additional_input=str(task.additional_input),
+                created_at=task.created_at.isoformat("T")+"Z",
             )
             return task
         except Exception as e:
