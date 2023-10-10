@@ -41,6 +41,7 @@ if __name__ == "__main__":
     # modules are imported here so that logging is setup first
     import forge.agent
     import forge.sdk.db
+    import forge.sdk.ai_memory
     from forge.sdk.workspace import LocalWorkspace
 
     print(logo)
@@ -49,6 +50,7 @@ if __name__ == "__main__":
     port = os.getenv("PORT", 8000)
 
     database = forge.sdk.db.AgentDB(database_name, debug_enabled=False)
-    agent = forge.agent.ForgeAgent(database=database, workspace=workspace)
+    vectordb = forge.sdk.ai_memory.AgentVectorDB()
+    agent = forge.agent.ForgeAgent(database=database, vectordb=vectordb, workspace=workspace)
 
     agent.start(port=port)
