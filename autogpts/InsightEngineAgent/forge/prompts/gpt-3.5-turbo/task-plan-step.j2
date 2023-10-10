@@ -5,10 +5,11 @@ The current date is {{ date }}. Your task is:
 
 {{ task }}
 
-Answer in the provided format. Remember to enclose data yet to be retrieved with < and > (e.g '<URL_OF_WEBPAGE>')
+Answer in the provided format. Remember to enclose data that needs to be retrieved with < and > (e.g '<URL_OF_WEBPAGE>').
 
 Your job is to create a plan outlining all necessary steps for the execution of the given task with the current abilities available. Remember that you should provide
 a list of steps that are achievable through the current abilities and split into one action per step. Your output will be consumed by another LLM that will create the steps.
+Always choose the least resource-consuming route.
 
 {% if constraints %}
 ## Constraints
