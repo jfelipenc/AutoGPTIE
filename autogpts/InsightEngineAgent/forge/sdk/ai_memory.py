@@ -1,9 +1,13 @@
 import os
 import weaviate
+import pprint
 
 from .forge_log import ForgeLogger
 
 LOG = ForgeLogger(__name__)
+
+# generative-openai is used for RAG
+# text2vec-openai is used for vectorization
 
 SYSTEM_SCHEMAS = [
     {
@@ -12,10 +16,6 @@ SYSTEM_SCHEMAS = [
             {
                 "name": "taskId",
                 "dataType": ["uuid"],
-            },
-            {
-                "name": "taskName",
-                "dataType": ["text"],
             },
             {
                 "name": "taskInput",
@@ -28,6 +28,16 @@ SYSTEM_SCHEMAS = [
             {
                 "name": "createdAt",
                 "dataType": ["date"],
+            },
+            {
+                "name": "successful",
+                "dataType": ["boolean"],
+                "description": "Whether the task was successful or not"
+            },
+            {
+                "name": "n_retry",
+                "dataType": ["int"],
+                "description": "Number of times the task was retried"
             }
         ],
         "vectorizer": "text2vec-openai",
@@ -57,11 +67,31 @@ SYSTEM_SCHEMAS = [
             },
             {
                 "name": "taskId",
-                "dataType": ["Task"],
+                "dataType": ["text"],
             },
             {
                 "name": "createdAt",
                 "dataType": ["date"],
+            },
+            {
+                "name": "ability_chosen",
+                "dataType": ["text"],
+                "description": "The ability chosen to execute the step"
+            },
+            {
+                "name": "ability_parameters",
+                "dataType": ["text"],
+                "description": "The parameters passed to the ability"
+            },
+            {
+                "name": "successful",
+                "dataType": ["boolean"],
+                "description": "Whether the step was successful or not"
+            },
+            {
+                "name": "retry_sequence",
+                "dataType": ["int"],
+                "description": "If more than one retry, this number reflects in which retry sequence the step was executed"
             }
         ],
         "vectorizer": "text2vec-openai",
@@ -75,20 +105,24 @@ SYSTEM_SCHEMAS = [
         "properties": [
             {
                 "name": "stepOutputId",
-                "dataType": ["int"],
+                "dataType": ["uuid"],
             },
             {
                 "name": "outputThought",
-                "dataType": ["text"],
+                "dataType": ["text[]"],
             },
             {
                 "name": "outputValue",
-                "dataType": ["text"],
+                "dataType": ["text[]"],
             },
             {
                 "name": "stepId",
-                "dataType": ["Step"],
-            }
+                "dataType": ["text"],
+            },
+            {
+                "name": "createdAt",
+                "dataType": ["date"],
+            },
         ],
         "vectorizer": "text2vec-openai",
         "moduleConfig": {
@@ -101,7 +135,7 @@ SYSTEM_SCHEMAS = [
         "properties": [
             {
                 "name": "artifactId",
-                "dataType": ["text"],
+                "dataType": ["uuid"],
             },
             {
                 "name": "artifactName",
@@ -122,8 +156,7 @@ SYSTEM_SCHEMAS = [
         ],
         "vectorizer": "text2vec-openai",
         "moduleConfig": {
-            "text2vec-openai": {},
-            "generative-openai": {}
+            "text2vec-openai": {}
         }
     },
 ]
@@ -146,8 +179,9 @@ class AgentVectorDB:
     def create_system_schemas(self):
         schemas = self.client.schema.get()
         for schema in SYSTEM_SCHEMAS:
-            if schema not in schemas["classes"]:
+            if not self.client.schema.contains(schema):
                 try:
+                    print(f"Creating new schema {schema['class']}...")
                     self.client.schema.create_class(schema)
                 except Exception as e:
                     LOG.warning(f"Failed creating system schemas due to {e}")
@@ -181,6 +215,16 @@ class AgentVectorDB:
         self.client.data_object.create(class_name=step["class"], 
                                        data_object=step["properties"])
     
+    async def update_step_additional_input(self, step_id: str, step_additional_input: str):
+        step = {
+            "class": "Step",
+            "properties": {
+                "stepAdditionalInput": step_additional_input
+            }
+        }
+        self.client.data_object.update(class_name=step["class"], uuid=step_id,
+                                       data_object=step["properties"])
+    
     async def create_step_output(self, step_output_id: str, output_thought: str, output_value: str, step_id: str):
         step_output = {
             "class": "StepOutput",
@@ -211,6 +255,20 @@ class AgentVectorDB:
     async def get_step_output(self, step_output_id: str):
         step_output = self.client.data_object.get(class_name="StepOutput", id=step_output_id)
         return step_output
+    
+    async def get_all_steps_from_task(self, task_id: str):
+        graphql = """{
+                Get {
+                    Step(where: {taskId: {eq: "%s"}}) {
+                        stepId,
+                        stepName,
+                        stepInput,
+                        stepAdditionalInput,
+                        createdAt
+                }
+            }"""
+        response = self.client.query.raw(graphql % task_id)
+        return response
 
     async def search_step_output(self, search_query: str):
         response = (
@@ -223,5 +281,18 @@ class AgentVectorDB:
             .with_additional(["distance"])
             .do()
             )
+        
+        return response
+
+    async def search_memory_gen(self, prompt: str, class_name: str = "StepOutput"):
+        response = (
+            self.client.query
+            .get(class_name, ["outputThought", "outputValue"])
+            .with_generate(grouped_task=prompt)
+            #.with_near_text({
+            #    "concepts": [concept],
+            #})
+            .with_limit(5)
+        ).do()
         
         return response
