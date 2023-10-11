@@ -1,12 +1,15 @@
 import json
 import pprint
 import datetime
+import time
+import uuid
 
 import tiktoken
 
 from forge.sdk import (
     Agent,
     AgentDB,
+    AgentVectorDB,
     Step,
     StepRequestBody,
     Workspace,
@@ -73,14 +76,14 @@ class ForgeAgent(Agent):
     This is just a starting point.
     """
 
-    def __init__(self, database: AgentDB, workspace: Workspace):
+    def __init__(self, database: AgentDB, vectordb: AgentVectorDB, workspace: Workspace):
         """
         The database is used to store tasks, steps and artifact metadata. The workspace is used to
         store artifacts. The workspace is a directory on the file system.
 
         Feel free to create subclasses of the database and workspace to implement your own storage
         """
-        super().__init__(database, workspace)
+        super().__init__(database, vectordb, workspace)
 
     async def create_task(self, task_request: TaskRequestBody) -> Task:
         """
@@ -129,11 +132,129 @@ class ForgeAgent(Agent):
             # Handling JSON Decoding errors
             LOG.error(f"""Unable to decode chat response: {chat_response}
                       failed with error {e}""")
+            answer = None
         except Exception as e:
             # Handling other exceptions
             LOG.error(f"Unable to generate chat response: {e}")
+            answer = None
             
         return answer
+    
+    async def adding_substep_output(self,
+                                    step_output_thought: dict,
+                                    step_output_value: dict,
+                                    step_id: str
+                                    ):
+        
+        output_values = [str(value) for key, value in step_output_value.items()]
+        output_thoughts = [str(value) for key, value in step_output_thought.items()]
+        LOG.info("Creating output artifact on vector database...")
+        try:
+            await self.vectordb.create_step_output(
+                step_output_id=str(uuid.uuid4()),
+                output_thought=output_thoughts,
+                output_value=output_values,
+                step_id=step_id
+            )
+        except Exception as e:
+            LOG.warning(f"Failed creating output artifact on vector database due to {e}")
+    
+    async def execute_substep(self, 
+                              task_id: str,
+                              step_inc: int,
+                              is_last: bool,
+                              prompt_engine: PromptEngine, 
+                              substep_request: StepRequestBody,
+                              error_info: str) -> Step:
+        LOG.info(f"Executing step #{step_inc+1} with body: {substep_request}")
+        
+        if error_info != "":
+            substep_request.additional_input["error_info"] = error_info
+        
+        # Create new step in database
+        substep = await self.db.create_step(
+            task_id=task_id, input=substep_request, is_last=is_last
+        )
+        # Create step in vector database
+        await self.vectordb.create_step(
+            step_id=substep.step_id,
+            step_name=substep.name,
+            step_input=substep.input,
+            step_additional_input=str(substep.additional_input),
+            task_id=task_id,
+            created_at=substep.created_at.isoformat("T")+"Z"
+        )
+        
+        # creates prompt for response format
+        system_prompt = prompt_engine.load_prompt("system-format")
+        
+        # creates prompt for retrieving important information
+        retrieval_prompt = f"""
+            Given the task input below, provide suitable information from previous steps:
+            
+            {substep.input}
+        """
+        
+        previous_step_output = json.dumps(await self.vectordb.search_memory_gen(
+                prompt=retrieval_prompt,
+                class_name="StepOutput"
+                )
+            )
+        LOG.info(f"Previous step output summarized by the LLM: {previous_step_output}")
+        
+        # specify task parameters
+        task_kwargs = {
+            "task": substep.input,
+            "additional_input": substep.additional_input,
+            "previous_step_output": previous_step_output,
+            "abilities": self.abilities.list_abilities_for_prompt(),
+        }
+        
+        # load task prompt with parameters
+        task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
+        
+        # messages list
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": await self.check_and_trim_message(task_prompt)}
+        ]
+        
+        # Chat completion request
+        answer = await self.make_chat_completion(messages)
+        if answer == None:
+            answer = await self.make_chat_completion(messages)
+        LOG.info(f"Answer for this step #{step_inc+1}: {answer}")
+        
+        # extracts the ability required to execute the step
+        try:
+            # selects ability to run
+            ability = answer["ability"]
+            
+            # run the ability and get the output
+            output = await self.abilities.run_ability(
+                task_id, ability["name"], **ability["args"]
+            )
+            output = {'output': output}
+            
+            # captures the Speak part as output or whole answer
+            #try:
+            #    substep.output = answer["thoughts"]["speak"]
+            #except Exception as e:
+            substep.output = answer
+                
+            LOG.info(f"Finished executing step #{step_inc+1}.")
+            
+            # Creating object in database for step output
+            await self.adding_substep_output(
+                step_output_thought=substep.output,
+                step_output_value=output,
+                step_id=substep.step_id
+            )
+            error_info = ""
+            return substep
+        except Exception as e:
+            error_info = str(e)
+            return error_info
     
     async def execute_step(self, task_id: str, step_request: StepRequestBody) -> Step:
         """
@@ -188,73 +309,39 @@ class ForgeAgent(Agent):
         planned_steps = plan_answer["plan"]
         
         LOG.info(f"ORIGINAL STEP REQUEST BODY: {step_request}")
+        
         # ==== STEP EXECUTION ====
         for i, dict_step_request in enumerate(planned_steps):
             successful = False
             n_exec = 0
             error_info = ""
+            
             while not successful and n_exec < 3:
-                step_request = StepRequestBody(input=dict_step_request["input"],
-                                            additional_input=dict_step_request["additional_input"])
-                LOG.info(f"Executing step #{i+1} with body: {step_request}")
-                
-                if error_info != "":
-                    step_request.additional_input["error_info"] = error_info
-                
-                is_last = True if i+1 == len(planned_steps) else False
-                # Create new step in database
-                step = await self.db.create_step(
-                    task_id=task_id, input=step_request, is_last=is_last
+                substep_request = StepRequestBody(
+                    input=dict_step_request["input"],
+                    additional_input=dict_step_request["additional_input"] if "additional_input" in list(dict_step_request.keys()) else None
                 )
+                is_last = True if i+1 == len(planned_steps) else False
                 
-                # creates prompt for response format
-                system_prompt = prompt_engine.load_prompt("system-format")
-                
-                # specify task parameters
-                task_kwargs = {
-                    "task": step_request.input,
-                    "additional_input": step_request.additional_input,
-                    "abilities": self.abilities.list_abilities_for_prompt(),
-                }
-                
-                # load task prompt with parameters
-                task_prompt = prompt_engine.load_prompt("task-step", **task_kwargs)
-                
-                # messages list
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": await self.check_and_trim_message(task_prompt)}
-                ]
-                
-                answer = await self.make_chat_completion(messages)
-                    
-                # extracts the ability required to execute the step
-                try:
-                    ability = answer["ability"]
-                    # run the ability and get the output
-                    output = await self.abilities.run_ability(
-                        task_id, ability["name"], **ability["args"]
-                    )
-                    try:
-                        step.output = answer["thoughts"]["speak"]
-                    except Exception as e:
-                        step.output = answer
-                    LOG.info(f"Finished executing step #{i+1}. Agent output: {step.output}")
-                    if i < len(planned_steps):
-                        LOG.info(f"Adding output to next step additional input.")
-                        planned_steps[i+1]["additional_input"]["previous_step_output"] = output
-                    
-                    # Setting variables for retry logic
-                    error_info = ""
-                    successful = True
-                except Exception as e:
+                substep = await self.execute_substep(
+                    task_id=task_id,
+                    step_inc=i,
+                    is_last=is_last,
+                    prompt_engine=prompt_engine,
+                    substep_request=substep_request,
+                    error_info=error_info
+                )
+                if type(substep) == str:
+                    error_info = substep
                     n_exec += 1
-                    error_info = str(e)
-                    LOG.warning(f"Failed executing the step #{i+1} due to error {e}.\n Trying again ({n_exec}).")
+                else:
+                    successful = True
+            
             if n_exec == 3 and not successful:
-                LOG.error(f"Failed execution of step {i+1}. Ending now.")
-                return None
+                LOG.error(f"Failed execution of step {i+1}. Error information: {error_info}.\n")
+                return substep
+            
         if is_last:
-            LOG.info(f"Finished execution of step {i+1}.")
-        return step
+            LOG.info(f"Finished execution of task: {task_id}.")
+        return substep
     
