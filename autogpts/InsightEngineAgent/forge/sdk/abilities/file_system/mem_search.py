@@ -30,7 +30,7 @@ LOG = ForgeLogger(__name__)
     ],
     output_type="list[dict]"
 )
-async def search_memory(agent, task_id: str, prompt: str, concept: str, class_name: str) -> List[dict]:
+async def search_memory_gen(agent, task_id: str, prompt: str, concept: str, class_name: str) -> List[dict]:
     LOG.info(f"Searching memory for {prompt}...")
     search_results = await agent.ai_memory.search_memory_gen(prompt)
     LOG.info(f"Search results: {search_results}")
