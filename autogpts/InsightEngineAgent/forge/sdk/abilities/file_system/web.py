@@ -35,31 +35,31 @@ async def fetch_webpage(agent, task_id: str, url: str) -> str:
     content = soup.get_text()
     return content
 
-@ability(
-    name="fetch_write_webpage",
-    description="Retrieves the content of a URL and saves to a .txt file. Requires the URL.",
-    parameters=[
-        {
-            "name": "url",
-            "description": "Webpage URL",
-            "type": "string",
-            "required": True
-        },
-        {
-            "name": "filepath",
-            "description": "Path to output TXT file",
-            "type": "string",
-            "required": True
-        }
-    ],
-    output_type="None"
-)
-async def fetch_write_webpage(agent, task_id: str, url: str, filepath: str):
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content)
-    content = soup.get_text()
-    await write_file(agent, task_id, filepath, content)
+# @ability(
+#     name="fetch_write_webpage",
+#     description="Retrieves the content of a URL and saves to a .txt file. Requires the URL.",
+#     parameters=[
+#         {
+#             "name": "url",
+#             "description": "Webpage URL",
+#             "type": "string",
+#             "required": True
+#         },
+#         {
+#             "name": "filepath",
+#             "description": "Path to output TXT file",
+#             "type": "string",
+#             "required": True
+#         }
+#     ],
+#     output_type="None"
+# )
+# async def fetch_write_webpage(agent, task_id: str, url: str, filepath: str):
+#     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'}
+#     response = requests.get(url, headers=headers)
+#     soup = BeautifulSoup(response.content)
+#     content = soup.get_text()
+#     await write_file(agent, task_id, filepath, content)
     
 @ability(
     name="search_query",
