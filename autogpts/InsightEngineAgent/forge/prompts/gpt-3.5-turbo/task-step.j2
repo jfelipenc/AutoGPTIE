@@ -5,17 +5,16 @@ Your task is:
 
 {{ task }}
 
-Answer in the provided format. Any data you might need is in the additional inputs or previous steps outputs below. Data that is enclosed by < and >
-need to be replaced by information found in previous steps output. DO NOT USE any variable enclosed by < and > (e.g <DATA>).
-
+Answer in the provided format. Here are the additional input for this step (it might have file paths, URLs, or other required information to take into account):
 {{ additional_input }}
 
-Previous steps output:
+{%if error_info != "" %}
+    Error information from previous execution of this same step: {{ error_info }}
+{% endif %}
 
-{{ previous_step_output }}
 
 Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and
-pursue simple strategies with no legal complications. If there are any values for error_info, take that into account when building ability response.
+pursue simple strategies with no legal complications. If there are any error information, take that into account when selecting ability and arguments.
 
 {% if constraints %}
 ## Constraints
