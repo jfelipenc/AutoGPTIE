@@ -1,6 +1,6 @@
 import os
 import weaviate
-import pprint
+import datetime
 
 from .forge_log import ForgeLogger
 
@@ -232,7 +232,8 @@ class AgentVectorDB:
                 "stepOutputId": step_output_id,
                 "outputThought": output_thought,
                 "outputValue": output_value,
-                "stepId": step_id
+                "stepId": step_id,
+                "createdAt": datetime.datetime.now().isoformat("T")+"Z"
             }
         }
         self.client.data_object.create(class_name=step_output["class"], 
@@ -255,6 +256,24 @@ class AgentVectorDB:
     async def get_step_output(self, step_output_id: str):
         step_output = self.client.data_object.get(class_name="StepOutput", id=step_output_id)
         return step_output
+    
+    async def get_step_output_from_stepid(self, step_id: str):
+        graphql = """{
+            Get {
+                StepOutput(
+                    where: {stepId: {eq: "%s"}}
+                    sort: {
+                        path: ["createdAt"]
+                        order: desc
+                    }
+                    limit: 1
+                    ) {
+                    outputValue
+                }        
+            }
+            }"""
+        response = self.client.query.raw(graphql % step_id)
+        return response
     
     async def get_all_steps_from_task(self, task_id: str):
         graphql = """{
