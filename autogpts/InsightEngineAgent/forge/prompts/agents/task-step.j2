@@ -1,0 +1,8 @@
+{% extends "techniques/expert.j2" %}
+{% block expert %}Planner{% endblock %}
+{% block prompt %}
+The current date is {{ date }}. The data available is:
+
+{{ last_output }}
+
+You must analyze the data and reply with insights found in the data.
