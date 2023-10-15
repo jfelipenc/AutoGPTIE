@@ -1,5 +1,4 @@
 from ..registry import ability
-from ai_memory import get_step_output_from_stepid
 from forge.sdk import (
     ForgeLogger, 
     chat_completion_request, 
@@ -41,7 +40,7 @@ def build_sql_query(agent, task_id: str, step_input: str) -> str:
     output_type="string"
 )
 async def insight_agent(agent, task_id: str, step_id: str) -> str:
-    last_output = get_step_output_from_stepid(step_id)
+    last_output = agent.vectordb.get_step_output_from_stepid(step_id)
     
     prompt_engine = PromptEngine("agents")
     
