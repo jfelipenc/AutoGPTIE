@@ -1,23 +1,14 @@
 {% extends "techniques/expert.j2" %}
 {% block expert %}Planner{% endblock %}
 {% block prompt %}
-The current date is {{ date }}. Your task is:
+The current date is {{ date }}. Your original task is:
 
 {{ task }}
 
 Answer in the provided format.
 
-Your job is to create a plan outlining all necessary steps for the execution of the given task. Your output will be used by another agent to execute the task.
-Always create steps that can be executed with only one ability. Always choose the plan with the least amount of steps.
-
-
-{% if constraints %}
-## Constraints
-You operate within the following constraints:
-{% for constraint in constraints %}
-- {{ constraint }}
-{% endfor %}
-{% endif %}
+Your job is to decompose the original task into smaller, more manageable and executable sub-tasks using a hierarchical approach. You should break the task into
+a tree-like structure and keep it ordered by order of execution. Try to make each subtask executable by one of the abilities available, but do NOT preselect the ability or mention it.
 
 {% if resources %}
 ## Resources
@@ -35,10 +26,4 @@ You have access to the following abilities you can call:
 {% endfor %}
 {% endif %}
 
-{% if best_practices %}
-## Best practices
-{% for best_practice in best_practices %}
-- {{ best_practice }}
-{% endfor %}
-{% endif %}
 {% endblock %}
