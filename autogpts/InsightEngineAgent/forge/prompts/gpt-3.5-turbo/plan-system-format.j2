@@ -1,27 +1,40 @@
 Reply only in json with the following format:
 
 {
-    \"plan\": [ 
+    "task": "Original task", 
+    "subtasks": [
         {
-            \"input\": \"Input prompt for this step\",
-            \"additional_input\": {
-                \"args\": {
-                    \"arg_1\": \"value\",
-                    \"arg_2\": etc...
+            "task": "First executable step",
+            "subtasks": [
+                {
+                    "task": "First subtask of first executable step"
+                },
+                {
+                    "task": "Second subtask of first executable step"
+                },
+                {
+                    "task": "Third subtask of first executable step"
                 }
-            },
-            \"step_order\": 1
+            ]
         },
         {
-            \"input\": \"Input prompt for this step\",
-            \"additional_input\": {
-                \"args\": {
-                    \"arg_1\": \"value\",
-                    \"arg_2\": etc...
+            "task": "Second executable step",
+            "subtasks": [
+                {
+                    "task": "First subtask of second executable step"
+                },
+                {
+                    "task": "Second subtask of second executable step"
                 }
-            },
-            \"step_order\": 2
+            ]
         },
+        {
+            "task": "Third executable step",
+            "subtasks": [
+                {
+                    "task": "First subtask of third executable step"
+                }
+            ]
+        }
     ]
 }
-
