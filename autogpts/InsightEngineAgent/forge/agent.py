@@ -226,6 +226,8 @@ class ForgeAgent(Agent):
             LOG.info(f"Finished executing step id:{step.step_id}. Updating status...")
             step.status = "completed"
             
+            await self.db.update_step(task_id=task_id, step_id=step.step_id, status=step.status)
+            
             # Creating object in database for step output
             await self.adding_substep_output(
                 step_output_thought=step.output,
