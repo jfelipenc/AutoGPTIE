@@ -1,12 +1,18 @@
 import pandas as pd
 import xlrd
-import json
+import string
+import random
+import os
+import re
 import sqlalchemy as sa
 
 from forge.sdk import ForgeLogger
 from ..registry import ability
 
 LOG = ForgeLogger(__name__)
+
+async def id_generator(size=8, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 @ability(
     name="read_excel_to_df",
@@ -36,12 +42,84 @@ async def read_excel_to_df(agent, task_id: str, excel_file_path: str, sheet_name
         will be read.quit
 
     Returns:
-    A Pandas DataFrame containing the data in the Excel sheet.
+    A dictionary containing the temporary table name and other metadata for agent to use.
     """
     sheet_name_found = xlrd.open_workbook(excel_file_path, on_demand=True).sheet_names()
     sheet_name = sheet_name if sheet_name in sheet_name_found else sheet_name_found[0]
     df = pd.read_excel(excel_file_path, sheet_name=sheet_name)
-    return df.to_dict()
+    df.columns = df.columns.str.replace(' ', '_')
+    
+    # adding dataframe to temporary sql table
+    temp_table_name = await id_generator(chars=string.ascii_lowercase+string.ascii_uppercase)
+    n_rows = df.to_sql(
+        name=temp_table_name,
+        con="sqlite:///agent.db",
+        if_exists="replace"
+    )
+    
+    # metadata for access
+    metadata = {
+        "operation": f"The data from the excel_file {excel_file_path} was loaded into a temporary table. Please use the following information to access the data.",
+        "table_name": temp_table_name,
+        "con": "sqlite:///autogpts/InsightEngineAgent/agent.db",
+        "n_rows": n_rows,
+        "columns": df.columns.tolist(),
+        "dtypes": df.dtypes.to_dict(),
+        "shape": df.shape,
+    }
+    return metadata
+
+@ability(
+    name="select_from_table",
+    description="Selects data from a table and insert into a temporary table. Use when needing to query/manipulate data from a table.",
+    parameters=[
+        {
+            "name": "sql_query",
+            "description": "The SQL query to run. All column names must be wrapped in double quotes (\").",
+            "type": "string",
+            "required": True,
+        },
+        {
+            "name": "connection_string",
+            "description": "The connection string to the database.",
+            "type": "string",
+            "required": False,
+        }
+    ],
+    output_type="dict"
+)
+async def select_from_table(agent, task_id: str, sql_query: str, connection_string: str = "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db") -> dict:
+    """Selects data from a table and insert into a temporary table.
+
+    Args:
+    table_name: The name of the table to select from.
+    connection_string: The connection string to the database.
+
+    Returns:
+    A dictionary containing the temporary table name and other metadata for agent to use.
+    """
+    # query data from table
+    df = pd.read_sql(sql_query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+    
+    # adding dataframe to temporary sql table
+    temp_table_name = await id_generator(chars=string.ascii_lowercase+string.ascii_uppercase)
+    n_rows = df.to_sql(
+        name=temp_table_name,
+        con="sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db",
+        if_exists="replace"
+    )
+    
+    # metadata for access
+    metadata = {
+        "operation": f"The data retrieved from {sql_query} was loaded into a temporary table. Please use the following information to access the data.",
+        "table_name": temp_table_name,
+        "con": "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db",
+        "n_rows": n_rows,
+        "columns": ["'"+col+"'" for col in df.columns],
+        "dtypes": df.dtypes.to_dict(),
+        "shape": df.shape,
+    }
+    return metadata
 
 @ability(
     name="pg_to_df_rquery",
