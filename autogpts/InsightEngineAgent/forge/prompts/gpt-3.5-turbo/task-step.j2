@@ -1,5 +1,5 @@
 {% extends "techniques/expert.j2" %}
-{% block expert %}Planner{% endblock %}
+{% block expert %}Task Execution{% endblock %}
 {% block prompt %}
 Today is {{ date }}. Your task is:
 
@@ -15,10 +15,11 @@ Answer in the provided format.
     Error information from previous execution of this same step: {{ error_info }}
 {% endif %}
 
-
 Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and
-pursue simple strategies with no legal complications. Always select from the abilities available. If you can't complete 
+pursue simple strategies with no legal complications. Always select from the abilities available. DO NOT hallucinate abilities. If you can't complete 
 in one step, please select one ability that will get you closer to the goal.
+
+Remember to wrap column names in SQL queries with double quotes (").
 
 {% if constraints %}
 ## Constraints
