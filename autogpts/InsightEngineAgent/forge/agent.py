@@ -152,6 +152,7 @@ class ForgeAgent(Agent):
     async def adding_substep_output(self,
                                     step_output_thought: dict,
                                     step_output_value: dict,
+                                    step_output_type: str,
                                     step_id: str
                                     ):
         
@@ -163,6 +164,7 @@ class ForgeAgent(Agent):
                 step_output_id=str(uuid.uuid4()),
                 output_thought=output_thoughts,
                 output_value=output_values,
+                output_type=step_output_type,
                 step_id=step_id,
             )
         except Exception as e:
@@ -171,24 +173,34 @@ class ForgeAgent(Agent):
     async def execute_substep(self, 
                               task_id: str,
                               step: Step,
-                              error_info: str) -> Step:
+                              error_info: str,
+                              previous_step_id: str = "") -> [Step, str]:
         LOG.info(f"""
                  Executing step id: {step.step_id}:
                     input: {step.input}
                     additional_input: {step.additional_input}
+                    previous_step_id: {previous_step_id if previous_step_id != "" else "None"}
                 {'Last execution error:'+ error_info if error_info != '' else ''}
                  """)
         
         prompt_engine = PromptEngine("gpt-3.5-turbo")
 
+        # fills error information
         if error_info != "":
             step.additional_input["error_info"] = error_info
-        
+            
+        # adds previous step execution output
+        if previous_step_id != "":
+            print("Awaiting for output from previous step...")
+            step.additional_input["previous_step_output"] = await self.vectordb.get_output_with_stepid(previous_step_id)
+            print("Output from previous step received.")
+            
         # creates prompt for response format
         system_prompt = prompt_engine.load_prompt("system-format")
         
         # specify task parameters
         task_kwargs = {
+            "date": str(datetime.date.today()),
             "task": step.input,
             "additional_input": step.additional_input,
             "error_info": error_info if error_info != "" else "",
@@ -212,12 +224,14 @@ class ForgeAgent(Agent):
         # extracts the ability required to execute the step
         try:
             # selects ability to run
+            print("Extracting ability to run...")
             ability = answer["ability"]
             
             # run the ability and get the output
             output = await self.abilities.run_ability(
                 task_id, ability["name"], **ability["args"]
             )
+            output_type = str(type(output))
             output = {'output': output}
 
             # update the step with the output of answer
@@ -225,48 +239,62 @@ class ForgeAgent(Agent):
             
             LOG.info(f"Finished executing step id:{step.step_id}. Updating status...")
             step.status = "completed"
-            
             await self.db.update_step(task_id=task_id, step_id=step.step_id, status=step.status)
             
             # Creating object in database for step output
             await self.adding_substep_output(
                 step_output_thought=step.output,
                 step_output_value=output,
+                step_output_type=output_type,
                 step_id=step.step_id
             )
             error_info = ""
-            return step
+            return step, ""
         except Exception as e:
+            print(f"Error when executing step id:{step.step_id}. Error information: {e}")
             error_info = str(e)
-            return step
+            return step, error_info
     
     async def execute_step(self, task_id: str, step_request: StepRequestBody) -> Step:
         # Get task to access task_input
         task = await self.db.get_task(task_id)
         steps = await self.db.list_steps(task_id)
         
-        current_step = [step for step in steps[0] if step.status != "completed"][0]
-        print(current_step)
+        previous_step_id = ""
+        steps_remaining = []
+        for step in steps[0]:
+            if step.status._value_ != 'completed' and step.status._value_ != 'failed':
+                steps_remaining.append(step)
+            elif step.status._value_ == 'completed':
+                previous_step_id = step.step_id
+        current_step = steps_remaining[0]
+        
         successful = False
         n_exec = 0
         error_info = ""
         
         while not successful and n_exec < 3:
-            step = await self.execute_substep(
+            step, error_info = await self.execute_substep(
                 task_id=task_id,
                 step=current_step,
-                error_info=error_info
+                error_info=error_info,
+                previous_step_id=previous_step_id
             )
             
-            if type(step) == str:
-                error_info = step
+            if error_info != "":
                 n_exec += 1
             else:
                 successful = True
         
+        #TODO: if step fails, either revert to previous step (done) or reassess plan
         if n_exec == 3 and not successful:
             LOG.error(f"Failed execution of step id {step.step_id}. Error information: {error_info}.\n")
+            step = await self.db.update_step(task_id, previous_step_id, status="created")
             return step
+        
+        if successful and step.is_last:
+            #TODO: implement if step is last, delete all temporary tables
+            pass
             
         return step
     
