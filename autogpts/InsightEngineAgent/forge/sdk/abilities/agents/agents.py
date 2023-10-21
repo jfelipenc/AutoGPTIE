@@ -1,3 +1,4 @@
+import subprocess
 from ..registry import ability
 from forge.sdk import (
     ForgeLogger, 
@@ -58,3 +59,28 @@ async def insight_agent(agent, task_id: str, step_id: str) -> str:
     
     answer = await chat_completion_request(**messages)
     return answer["choices"][0]["message"]["content"]
+
+@ability(
+    name="run_python_env",
+    description="Opens a Python environment and runs code from a list of strings",
+    parameters=[
+        {
+            "name": "command_list",
+            "description": "List of ordered python commands to run on the environment",
+            "type": "list",
+            "required": True
+        }
+    ],
+    output_type="string"
+)
+async def run_python_code(agent, task_id: str, command_list: []) -> str:
+    process = subprocess.Popen(['python'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    
+    output_list = []
+    for cmd in command_list:
+        output = process.communicate(input=cmd)[0]
+        output_list.append(output)
+    
+    output = b' '.join(output_list)
+    return output.decode()
+    

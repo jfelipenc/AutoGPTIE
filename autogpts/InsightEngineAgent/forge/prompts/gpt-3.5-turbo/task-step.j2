@@ -1,20 +1,25 @@
 {% extends "techniques/expert.j2" %}
-{% block expert %}Planner{% endblock %}
+{% block expert %}Task Execution{% endblock %}
 {% block prompt %}
-Your task is:
+Today is {{ date }}. Your task is:
 
 {{ task }}
 
-Answer in the provided format. Here are the additional input for this step (it might have file paths, URLs, or other required information to take into account):
-{{ additional_input }}
+Answer in the provided format.
+
+{% if additional_input != "{}" %}
+    Additional information: {{ additional_input }}
+{% endif %}
 
 {%if error_info != "" %}
     Error information from previous execution of this same step: {{ error_info }}
 {% endif %}
 
-
 Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and
-pursue simple strategies with no legal complications. If there are any error information, take that into account when selecting ability and arguments.
+pursue simple strategies with no legal complications. Always select from the abilities available. DO NOT hallucinate abilities. If you can't complete 
+in one step, please select one ability that will get you closer to the goal.
+
+Remember to wrap column names in SQL queries with double quotes (").
 
 {% if constraints %}
 ## Constraints
