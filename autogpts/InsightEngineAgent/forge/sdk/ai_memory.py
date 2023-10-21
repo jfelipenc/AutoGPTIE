@@ -116,6 +116,10 @@ SYSTEM_SCHEMAS = [
                 "dataType": ["text[]"],
             },
             {
+                "name": "outputType",
+                "dataType": ["text"],
+            },
+            {
                 "name": "stepId",
                 "dataType": ["text"],
             },
@@ -205,6 +209,7 @@ class AgentVectorDB:
             "class": "Step",
             "properties": {
                 "stepId": step_id,
+                
                 "stepName": step_name,
                 "stepInput": step_input,
                 "stepAdditionalInput": step_additional_input,
@@ -225,13 +230,14 @@ class AgentVectorDB:
         self.client.data_object.update(class_name=step["class"], uuid=step_id,
                                        data_object=step["properties"])
     
-    async def create_step_output(self, step_output_id: str, output_thought: str, output_value: str, step_id: str):
+    async def create_step_output(self, step_output_id: str, output_thought: str, output_value: str, output_type: str, step_id: str):
         step_output = {
             "class": "StepOutput",
             "properties": {
                 "stepOutputId": step_output_id,
                 "outputThought": output_thought,
                 "outputValue": output_value,
+                "outputType": output_type,
                 "stepId": step_id,
                 "createdAt": datetime.datetime.now().isoformat("T")+"Z"
             }
@@ -257,21 +263,24 @@ class AgentVectorDB:
         step_output = self.client.data_object.get(class_name="StepOutput", id=step_output_id)
         return step_output
     
-    async def get_step_output_from_stepid(self, step_id: str):
-        graphql = """{
+    async def get_output_with_stepid(self, step_id: str):
+        graphql = """
+        {
             Get {
                 StepOutput(
-                    where: {stepId: {eq: "%s"}}
-                    sort: {
-                        path: ["createdAt"]
-                        order: desc
-                    }
-                    limit: 1
-                    ) {
-                    outputValue
-                }        
+                sort: {path: ["createdAt"], order: desc}
+                limit: 1
+                where: {path: ["stepId"], operator: Equal, valueString: "%s"}
+                ) {
+                stepOutputId
+                stepId
+                outputThought
+                outputValue
+                createdAt
+                }
             }
-            }"""
+        }
+        """
         response = self.client.query.raw(graphql % step_id)
         return response
     
