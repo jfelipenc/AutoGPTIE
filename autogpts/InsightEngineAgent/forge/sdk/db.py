@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     String,
+    Integer,
     create_engine,
 )
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,7 +24,7 @@ from sqlalchemy.orm import DeclarativeBase, joinedload, relationship, sessionmak
 
 from .errors import NotFoundError
 from .forge_log import ForgeLogger
-from .schema import Artifact, Pagination, Status, Step, StepRequestBody, Task
+from .schema import Artifact, Pagination, Status, Step, StepRequestBody, Task, Resource
 
 LOG = ForgeLogger(__name__)
 
@@ -80,7 +81,15 @@ class ArtifactModel(Base):
 
     step = relationship("StepModel", back_populates="artifacts")
     task = relationship("TaskModel", back_populates="artifacts")
-
+    
+class ResourceModel(Base):
+    __tablename__ = "resources"
+    
+    resource_type = Column(String)
+    resource_name = Column(String)
+    resource_path = Column(String)
+    resource_size = Column(Integer)    
+    resource_metadata = Column(String)
 
 def convert_to_task(task_obj: TaskModel, debug_enabled: bool = False) -> Task:
     if debug_enabled:
@@ -116,6 +125,17 @@ def convert_to_step(step_model: StepModel, debug_enabled: bool = False) -> Step:
         additional_input=step_model.additional_input,
     )
 
+def convert_to_resource(resource_model: ResourceModel) -> Resource:
+    return Resource(
+        resource_type=resource_model.resource_type,
+        resource_name=resource_model.resource_name,
+        resource_path=resource_model.resource_path,
+        resource_size=resource_model.resource_size,
+        resource_metadata=resource_model.resource_metadata,
+    )
+
+def convert_resource_to_prompt(resource_model: ResourceModel) -> str:
+    return f"""Name: {resource_model.resource_name}\nPath: {resource_model.resource_path}\nType: {resource_model.resource_type}\nMetadata: {resource_model.resource_metadata}"""
 
 def convert_to_artifact(artifact_model: ArtifactModel) -> Artifact:
     return Artifact(
@@ -463,4 +483,28 @@ class AgentDB:
             raise
         except Exception as e:
             LOG.error(f"Unexpected error while listing artifacts: {e}")
+            raise
+        
+    async def list_resources_for_prompt(
+        self, limit: int = 10
+    ) -> Tuple[Resource]:
+        if self.debug_enabled:
+            LOG.debug(f"Listing resources...")
+        try:
+            with self.Session() as session:
+                resources = (
+                    session.query(ResourceModel)
+                    .limit(limit)
+                    .all()
+                )
+                return (
+                    convert_resource_to_prompt(resource) for resource in resources
+                )
+        except SQLAlchemyError as e:
+            LOG.error(f"SQLAlchemy error while listing resources: {e}")
+            raise
+        except NotFoundError as e:
+            raise
+        except Exception as e:
+            LOG.error(f"Unexpected error while listing resources: {e}")
             raise
