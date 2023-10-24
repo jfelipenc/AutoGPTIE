@@ -61,6 +61,32 @@ class Artifact(BaseModel):
         example="main.py",
     )
 
+class Resource(BaseModel):
+    resource_type: str = Field(
+        ...,
+        description="Type of resource.",
+        example="ExcelFile",
+    )
+    resource_name: str = Field(
+        ...,
+        description="Name of resource.",
+        example="my_excel_file.xlsx",
+    )
+    resource_path: str = Field(
+        ...,
+        description="Path of resource.",
+        example="/my_folder/my_other_folder/",
+    )
+    resource_size: int = Field(
+        ...,
+        description="Size of resource.",
+        example="1000",
+    )
+    resource_metadata: str = Field(
+        ...,
+        description="Metadata of resource.",
+        example="{'author': 'John Doe'}",
+    )
 
 class StepOutput(BaseModel):
     pass
@@ -163,6 +189,9 @@ class Step(StepRequestBody):
     )
     is_last: bool = Field(
         ..., description="Whether this is the last step in the task.", example=True
+    )
+    n_retries = Field(
+        ..., description="Number of retries for the task.", example=0
     )
 
 
