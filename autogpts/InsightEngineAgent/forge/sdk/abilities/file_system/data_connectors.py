@@ -16,7 +16,7 @@ async def id_generator(size=8, chars=string.ascii_uppercase + string.digits):
 
 @ability(
     name="read_excel_to_df",
-    description="Read data from Excel file and return a DataFrame in dictionary format. Use when needing to open and read an excel file.",
+    description="Read data from Excel file and return a DataFrame in dictionary format. Use when needing to extract data from excel file.",
     parameters=[
         {
             "name": "excel_file_path",
@@ -71,7 +71,8 @@ async def read_excel_to_df(agent, task_id: str, excel_file_path: str, sheet_name
 
 @ability(
     name="select_from_table",
-    description="Selects data from a table and insert into a temporary table. Use when needing to query/manipulate data from a table.",
+    description="""Selects data from a table using SQL and insert into a temporary table. With this you can manipulate data, calculate, aggregate and other operations.
+        If a table_name is provided, use that.""",
     parameters=[
         {
             "name": "sql_query",
@@ -184,3 +185,31 @@ async def pg_to_df_rquery(agent, task_id: str, query: str, database: str = "post
     df = pd.read_sql(query, conn)
     conn.close()
     return df
+
+@ability(
+    name="build_graph",
+    description="Generate data for building a graph. Use when needing to show a graph using CanvasJS (Angular).",
+    parameters=[
+        {
+            "name": "query",
+            "type": "string",
+            "description": "The query to be executed to fetch data from a table. Remember to format the column names with double quotes (\") and rename them to X and Y according to their graph axes.",
+            "required": True,
+        }
+    ],
+    output_type="list"
+)
+async def build_graph(agent, task_id: str, query: str) -> list:
+    """Returns data to be used on a graph visualization with Angular.
+
+    Args:
+    query: The query to be executed to fetch data from a table.
+
+    Returns:
+    A list containing the data to be used on a graph visualization.
+    """
+    task = await agent.db.get_task(task_id)
+    df = pd.read_sql(query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+    df = df.astype(str)
+    
+    return {'data': df.to_json(orient="records"), 'task': task.input}
