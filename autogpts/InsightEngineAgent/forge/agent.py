@@ -82,7 +82,8 @@ class ForgeAgent(Agent):
         task_plan_kwargs = {
             "date": str(datetime.date.today()),
             "task": task.input,
-            "abilities": self.abilities.list_abilities_for_prompt()
+            "abilities": self.abilities.list_abilities_for_prompt(),
+            "resources": self.db.list_resources_for_prompt(),
         }
         task_plan = prompt_engine.load_prompt('task-plan-step', **task_plan_kwargs)
         messages = [
@@ -228,11 +229,11 @@ class ForgeAgent(Agent):
             ability = answer["ability"]
             
             # run the ability and get the output
-            output = await self.abilities.run_ability(
+            ability_output = await self.abilities.run_ability(
                 task_id, ability["name"], **ability["args"]
             )
-            output_type = str(type(output))
-            output = {'output': output}
+            output_type = str(type(ability_output))
+            output = {'output': ability_output}
 
             # update the step with the output of answer
             step.output = answer
@@ -273,7 +274,7 @@ class ForgeAgent(Agent):
         n_exec = 0
         error_info = ""
         
-        while not successful and n_exec < 3:
+        while not successful and n_exec < 3 and not current_step.is_last:
             step, error_info = await self.execute_substep(
                 task_id=task_id,
                 step=current_step,
@@ -292,8 +293,11 @@ class ForgeAgent(Agent):
             step = await self.db.update_step(task_id, previous_step_id, status="created")
             return step
         
-        if successful and step.is_last:
+        if not successful and step.is_last:
             #TODO: implement if step is last, delete all temporary tables
+            step.output = await self.vectordb.get_output_with_stepid(previous_step_id)
+            LOG.info(step.output)
+            #TODO: add data to last step for use in the frontend
             pass
             
         return step
