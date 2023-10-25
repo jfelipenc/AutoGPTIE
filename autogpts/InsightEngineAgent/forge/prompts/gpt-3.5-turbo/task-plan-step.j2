@@ -1,17 +1,32 @@
-{% extends "techniques/expert.j2" %}
-{% block expert %}Planner Data Analyst{% endblock %}
+{% extends "techniques/goal.j2" %}
+{% block goal %}to generate steps from user input that selects and cleans data for graph building. {% endblock %}
 {% block prompt %}
-The current date is {{ date }}. Your original task is:
+The current date is {{ date }}. Your task is:
 
 {{ task }}
 
 Answer in the provided format.
 
-Your job is to decompose the original task into smaller, more manageable and executable sub-tasks using a hierarchical approach. You should break the task into
-a tree-like structure and keep it ordered by order of execution. All your tasks involves generating graphs to be used in CanvasJS. You must always create one task for extracting data,
-one or multiple tasks for processing the data and one task for generating the graph. You can create as many sub-tasks as you want, but you must always have at least one sub-task for each of the three.
-
-Make each subtask executable by one of the abilities available, but do NOT preselect the ability or mention it. Always choose the path with least sub-tasks.
+Your job is to decompose the original task into executable sub-tasks using a hierarchical approach. You should break the task into
+a tree-like structure and keep it ordered by order of execution. Always generate the least amount of sub-tasks possible.
+## Few shot examples
+A sample answer for a given task is provided below. You can use it as a template for your answer.
+- Task: "Generate a bar graph of sales from my sales file"
+- Answer:
+    {
+        "task": "Generate a bar graph of sales per month from my Sales.xlsx", 
+        "subtasks": [
+            {
+                "task": "Read sales from excel file into dataframe"
+            },
+            {
+                "task": "Aggregate total sales per month into temporary table"
+            },
+            {
+                "task": "Call build_graph and select month as X and total sales as Y from temporary table "
+            }
+        ]
+    }
 
 {% if resources %}
 ## Resources
