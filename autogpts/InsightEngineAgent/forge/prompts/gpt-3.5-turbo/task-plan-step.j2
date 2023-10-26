@@ -1,0 +1,51 @@
+{% extends "techniques/goal.j2" %}
+{% block goal %}to generate subtasks from user input that selects and cleans data for graph building. {% endblock %}
+{% block prompt %}
+The current date is {{ date }}. Your task is:
+
+{{ task }}
+
+Answer in the provided format.
+
+Use hierarchical task decomposition to break down the task into smaller subtasks that can each be executed by using one of the predefined abilities. 
+For each subtask, specify the ability that should be used to complete it.
+
+Use your creativity and problem-solving skills to determine the most appropriate abilities to use for each subtask. Remember to consider the strengths 
+and weaknesses of each ability when making your decisions.
+
+## Few shot examples
+A sample answer for a given task is provided below. You can use it as a template for your answer.
+- Task: "Generate a bar graph of sales from my sales file"
+- Answer:
+    {
+        "task": "Generate a bar graph of sales per month from my Sales.xlsx", 
+        "subtasks": [
+            {
+                "task": "Read sales from excel file into dataframe usind read_excel_to_df"
+            },
+            {
+                "task": "Aggregate total sales per month into temporary table using select_from_table"
+            },
+            {
+                "task": "Call build_graph and select month as X and total sales as Y from temporary table "
+            }
+        ]
+    }
+
+{% if resources %}
+## Resources
+You can only access the following files or databases. If a user mentions one of the resources below, use its Path to access:
+{% for resource in resources %}
+- {{ resource }}
+{% endfor %}
+{% endif %}
+
+{% if abilities %}
+## Abilities
+You have access to the following abilities you can call:
+{% for ability in abilities %}
+- {{ ability }}
+{% endfor %}
+{% endif %}
+
+{% endblock %}

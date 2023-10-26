@@ -1,0 +1,12 @@
+{% extends "techniques/expert.j2" %}
+{% block expert %}Javascript programmer{% endblock %}
+{% block prompt %}
+ 
+Your task is to generate a plotly.js graph that meets the user task input:
+{{ task }}
+
+Use the data below to generate the graph. Remember to hard-code the data below in your javascript code appropriately.
+
+{{ data }}
+
+{% endblock %}

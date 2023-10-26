@@ -1,8 +1,7 @@
 ## Original ignores
-.github_access_token
 autogpt/keys.py
 autogpt/*.json
-auto_gpt_workspace/*
+**/auto_gpt_workspace/*
 *.mpeg
 .env
 azure.yaml
@@ -13,7 +12,7 @@ last_run_ai_settings.yaml
 auto-gpt.json
 log.txt
 log-ingestion.txt
-/logs
+logs
 *.log
 *.mp3
 mem.sqlite3
@@ -29,8 +28,11 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+build/
 develop-eggs/
 dist/
+plugins/
+plugins_config.yaml
 downloads/
 eggs/
 .eggs/
@@ -159,17 +161,17 @@ openai/
 # news
 CURRENT_BULLETIN.md
 
-# AgBenchmark
-agbenchmark/reports/
-
-# Nodejs
-package-lock.json
-package.json
-
-# Allow for locally private items
-# private
-pri* 
-# ignore
-ig*
-.github_access_token
-env_vars.sh
+agbenchmark_config/workspace
+agbenchmark_config/reports
+*.sqlite
+.agbench
+.agbenchmark
+.benchmarks
+.mypy_cache
+.pytest_cache
+.vscode
+ig_*
+agent.db
+agbenchmark_config/updates.json
+agbenchmark_config/challenges_already_beaten.json
+agbenchmark_config/temp_folder/*
