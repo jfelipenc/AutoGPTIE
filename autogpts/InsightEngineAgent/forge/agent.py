@@ -1,6 +1,7 @@
 import json
 import pprint
 import datetime
+import os
 import pandas as pd
 import uuid
 
@@ -41,7 +42,7 @@ class ForgeAgent(Agent):
         step_output = await self.vectordb.get_output_with_stepid(step_id)
         LOG.info("Retrieving output for frontend... ", json.loads(step_output))
         sql_query = step_output['outputThought'][-1]['args']['sql_query']
-        df = pd.read_sql(sql_query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+        df = pd.read_sql(sql_query, os.getenv('DATABASE_STRING'))
         df = df.astype(str)
     
         return {'data': df.to_json(orient="records"), 'task': task.input}
