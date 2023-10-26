@@ -11,17 +11,20 @@ Answer in the provided format.
     Additional information: {{ additional_input }}
 {% endif %}
 
+{% if previous_step_output != "" %}
+    Previous step output: {{ previous_step_output }}
+{% endif %}
+
 {%if error_info != "" %}
     Error information from previous execution of this same step: {{ error_info }}
 {% endif %}
 
-Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and
-pursue simple strategies with no legal complications. Always select from the abilities available. DO NOT hallucinate abilities. If you can't complete 
+Your decisions must always be made independently without seeking user assistance. Always select from the abilities available. DO NOT hallucinate abilities. If you can't complete 
 in one step, please select one ability that will get you closer to the goal.
 
-Always use build_graph or abilities that have "graph" in their names when you need to present the graph to the user. Remember to rename column names to X and Y according to their axes.
+Always use build_graph when you need to present the graph to the user. Remember to rename columns to X and Y according to their axes in your SQL query.
 
-Remember to wrap column names in SQL queries with double quotes (").
+Remember to wrap column names in SQL queries with double quotes ("). Remember to consider the table_name in previous step output!
 
 {% if constraints %}
 ## Constraints
