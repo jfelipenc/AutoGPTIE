@@ -190,9 +190,6 @@ class Step(StepRequestBody):
     is_last: bool = Field(
         ..., description="Whether this is the last step in the task.", example=True
     )
-    n_retries = Field(
-        ..., description="Number of retries for the task.", example=0
-    )
 
 
 class TaskListResponse(BaseModel):
