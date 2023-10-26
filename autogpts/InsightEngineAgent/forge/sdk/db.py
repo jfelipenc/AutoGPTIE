@@ -85,6 +85,7 @@ class ArtifactModel(Base):
 class ResourceModel(Base):
     __tablename__ = "resources"
     
+    resource_id = Column(Integer, primary_key=True, index=True)
     resource_type = Column(String)
     resource_name = Column(String)
     resource_path = Column(String)
@@ -327,6 +328,26 @@ class AgentDB:
             LOG.error(f"Unexpected error while getting step: {e}")
             raise
 
+    async def delete_step(
+        self,
+        task_id: str,
+        step_id: str,
+    ) -> None:
+        if self.debug_enabled:
+            LOG.debug(f"Deleting step with task_id: {task_id} and step_id: {step_id}")
+        try:
+            with self.Session() as session:
+                # Delete the step
+                session.query(StepModel).filter_by(task_id=task_id, step_id=step_id).delete()
+        except SQLAlchemyError as e:
+            LOG.error(f"SQLAlchemy error while deleting step: {e}")
+            raise
+        except NotFoundError as e:
+            raise
+        except Exception as e:
+            LOG.error(f"Unexpected error while deleting step: {e}")
+            raise
+        
     async def update_step(
         self,
         task_id: str,
@@ -487,7 +508,7 @@ class AgentDB:
         
     async def list_resources_for_prompt(
         self, limit: int = 10
-    ) -> Tuple[Resource]:
+    ) -> List[Resource]:
         if self.debug_enabled:
             LOG.debug(f"Listing resources...")
         try:
@@ -497,9 +518,8 @@ class AgentDB:
                     .limit(limit)
                     .all()
                 )
-                return (
-                    convert_resource_to_prompt(resource) for resource in resources
-                )
+                prompt_list = [convert_resource_to_prompt(resource) for resource in resources]
+                return prompt_list
         except SQLAlchemyError as e:
             LOG.error(f"SQLAlchemy error while listing resources: {e}")
             raise
