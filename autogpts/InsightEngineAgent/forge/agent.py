@@ -1,8 +1,7 @@
 import json
 import pprint
 import datetime
-import time
-import re
+import pandas as pd
 import uuid
 
 import tiktoken
@@ -32,8 +31,21 @@ class ForgeAgent(Agent):
 
         Feel free to create subclasses of the database and workspace to implement your own storage
         """
+        self.replan = False
         super().__init__(database, vectordb, workspace)
 
+    async def parse_data_for_canvasjs(self, task_id: str) -> list:
+        task = await self.db.get_task(task_id)
+        steps = await self.db.list_steps(task_id)
+        step_id = steps[0][-1].step_id
+        step_output = await self.vectordb.get_output_with_stepid(step_id)
+        LOG.info("Retrieving output for frontend... ", json.loads(step_output))
+        sql_query = step_output['outputThought'][-1]['args']['sql_query']
+        df = pd.read_sql(sql_query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+        df = df.astype(str)
+    
+        return {'data': df.to_json(orient="records"), 'task': task.input}
+    
     async def format_step_request(self, task: str, task_id: str, is_last: bool):
         """
         This method is used to create a step request from a task. The step request is then used to
@@ -83,8 +95,9 @@ class ForgeAgent(Agent):
             "date": str(datetime.date.today()),
             "task": task.input,
             "abilities": self.abilities.list_abilities_for_prompt(),
-            "resources": self.db.list_resources_for_prompt(),
+            "resources": await self.db.list_resources_for_prompt(),
         }
+        
         task_plan = prompt_engine.load_prompt('task-plan-step', **task_plan_kwargs)
         messages = [
             {"role": "system", "content": planner_format},
@@ -191,10 +204,15 @@ class ForgeAgent(Agent):
             step.additional_input["error_info"] = error_info
             
         # adds previous step execution output
+        previous_step_output = ""
         if previous_step_id != "":
             print("Awaiting for output from previous step...")
-            step.additional_input["previous_step_output"] = await self.vectordb.get_output_with_stepid(previous_step_id)
-            print("Output from previous step received.")
+            previous_step_output = await self.vectordb.get_output_with_stepid(previous_step_id)
+            try:
+                previous_step_output = previous_step_output['data']['Get']['StepOutput'][0]['outputValue']
+            except:
+                pass
+            print("Output from previous step received: ", previous_step_output)
             
         # creates prompt for response format
         system_prompt = prompt_engine.load_prompt("system-format")
@@ -204,8 +222,10 @@ class ForgeAgent(Agent):
             "date": str(datetime.date.today()),
             "task": step.input,
             "additional_input": step.additional_input,
+            "previous_step_output": previous_step_output,
             "error_info": error_info if error_info != "" else "",
             "abilities": self.abilities.list_abilities_for_prompt(),
+            "resources": await self.db.list_resources_for_prompt(),
         }
         
         # load task prompt with parameters
@@ -256,6 +276,40 @@ class ForgeAgent(Agent):
             error_info = str(e)
             return step, error_info
     
+    async def planning_agent(self, task_id: str, error_information: dict) -> Task:
+        task = await self.db.get_task(task_id)
+        steps = await self.db.list_steps(task_id)
+        
+        # loads the prompt engine with gpt-3.5-turbo templates
+        prompt_engine = PromptEngine("planning")
+        
+        # planner response format
+        planner_format = prompt_engine.load_prompt('plan-system-format')
+        # instructions format
+        task_plan_kwargs = {
+            "date": str(datetime.date.today()),
+            "task": task.input,
+            "errors": error_information,
+            "abilities": self.abilities.list_abilities_for_prompt(),
+            "resources": await self.db.list_resources_for_prompt(),
+        }
+        
+        task_replan = prompt_engine.load_prompt('replan-instruction', **task_plan_kwargs)
+        messages = [
+            {"role": "system", "content": planner_format},
+            {"role": "user", "content": task_replan}
+        ]
+        
+        for step in steps[0]:
+            await self.db.delete_step(task_id, step.step_id)
+        
+        # Creating steps from LLM planning agent
+        planned_steps = await self.make_chat_completion(messages)
+        
+        await self.parse_plan_to_steps(planned_steps, task.task_id)
+        #LOG.warning(f"Planned execution: {pprint.pformat(planned_steps)}")
+        return task
+        
     async def execute_step(self, task_id: str, step_request: StepRequestBody) -> Step:
         # Get task to access task_input
         task = await self.db.get_task(task_id)
@@ -268,7 +322,10 @@ class ForgeAgent(Agent):
                 steps_remaining.append(step)
             elif step.status._value_ == 'completed':
                 previous_step_id = step.step_id
-        current_step = steps_remaining[0]
+        try:
+            current_step = steps_remaining[0]
+        except:
+            current_step = steps[0][-1]
         
         successful = False
         n_exec = 0
@@ -287,18 +344,25 @@ class ForgeAgent(Agent):
             else:
                 successful = True
         
+        # if n_exec >= 3 and not successful:
+        #     if not self.replan:
+        #         #TODO: replan step execution by sending to planner agent with summary and error information
+        #         LOG.warning(f"Failed execution of step id {step.step_id} 3 times. Replanning...")
+        #         task = await self.planning_agent(task_id, error_info)
+        #         self.replan = True
+        #     else:
+        #         return step
+            
         #TODO: if step fails, either revert to previous step (done) or reassess plan
         if n_exec == 3 and not successful:
             LOG.error(f"Failed execution of step id {step.step_id}. Error information: {error_info}.\n")
             step = await self.db.update_step(task_id, previous_step_id, status="created")
             return step
         
-        if not successful and step.is_last:
+        if current_step.is_last:
             #TODO: implement if step is last, delete all temporary tables
             step.output = await self.vectordb.get_output_with_stepid(previous_step_id)
-            LOG.info(step.output)
             #TODO: add data to last step for use in the frontend
-            pass
             
         return step
     
