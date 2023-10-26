@@ -375,6 +375,28 @@ async def execute_agent_task_step(
             media_type="application/json",
         )
 
+@base_router.get(
+    "/agent/tasks/{task_id}/data", tags=["agent"]
+)
+async def get_agent_task_output_data(request: Request, task_id: str) -> list:
+    agent = request["agent"]
+    try:
+        data = await agent.parse_data_for_canvasjs(task_id)
+        return Response(content=json.dumps(data), status_code=200)
+    except NotFoundError:
+        LOG.exception(f"Error whilst trying to get task data: {task_id}")
+        return Response(
+            content=json.dumps({"error": "Task not found"}),
+            status_code=404,
+            media_type="application/json",
+        )
+    except Exception:
+        LOG.exception(f"Error whilst trying to get task data: {task_id}")
+        return Response(
+            content=json.dumps({"error": "Internal server error"}),
+            status_code=500,
+            media_type="application/json",
+        )
 
 @base_router.get(
     "/agent/tasks/{task_id}/steps/{step_id}", tags=["agent"], response_model=Step
