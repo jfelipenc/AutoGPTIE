@@ -9,25 +9,6 @@ from forge.sdk import (
 LOG = ForgeLogger(__name__)
 
 @ability(
-    name="build_sql_query",
-    description="Calls an Agent to build a SQL query to retrieve input requested information",
-    parameters=[
-        {
-            "name": "step_input",
-            "description": "Input request from step",
-            "type": "string",
-            "required": True
-        }
-    ],
-    output_type="string"
-)
-def build_sql_query(agent, task_id: str, step_input: str) -> str:
-    #TODO: load prompt format for SQL generation, query vector database for schema of available databases
-    #TODO: fill prompt, make chat completion request, return SQL query
-    
-    pass
-
-@ability(
     name="insight_agent",
     description="Calls an Agent to analyze data from last executed step and return insights in text form",
     parameters=[
