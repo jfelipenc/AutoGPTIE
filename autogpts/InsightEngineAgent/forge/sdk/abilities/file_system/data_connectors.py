@@ -11,6 +11,8 @@ from ..registry import ability
 
 LOG = ForgeLogger(__name__)
 
+db_filepath = os.getenv('DATABASE_STRING')
+
 async def id_generator(size=8, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
@@ -53,7 +55,7 @@ async def read_excel_to_df(agent, task_id: str, excel_file_path: str, sheet_name
     temp_table_name = await id_generator(chars=string.ascii_lowercase+string.ascii_uppercase)
     n_rows = df.to_sql(
         name=temp_table_name,
-        con="sqlite:///agent.db",
+        con=db_filepath,
         if_exists="replace"
     )
     
@@ -61,7 +63,7 @@ async def read_excel_to_df(agent, task_id: str, excel_file_path: str, sheet_name
     metadata = {
         "operation": f"The data from the excel_file {excel_file_path} was loaded into a temporary table. Please use the following information to access the data.",
         "table_name": temp_table_name,
-        "con": "sqlite:///autogpts/InsightEngineAgent/agent.db",
+        "con": db_filepath,
         "n_rows": n_rows,
         "columns": df.columns.tolist(),
         "dtypes": df.dtypes.to_dict(),
@@ -89,7 +91,7 @@ async def read_excel_to_df(agent, task_id: str, excel_file_path: str, sheet_name
     ],
     output_type="dict"
 )
-async def select_from_table(agent, task_id: str, sql_query: str, connection_string: str = "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db") -> dict:
+async def select_from_table(agent, task_id: str, sql_query: str, connection_string: str = db_filepath) -> dict:
     """Selects data from a table and insert into a temporary table.
 
     Args:
@@ -100,13 +102,13 @@ async def select_from_table(agent, task_id: str, sql_query: str, connection_stri
     A dictionary containing the temporary table name and other metadata for agent to use.
     """
     # query data from table
-    df = pd.read_sql(sql_query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+    df = pd.read_sql(sql_query, db_filepath)
     
     # adding dataframe to temporary sql table
     temp_table_name = await id_generator(chars=string.ascii_lowercase+string.ascii_uppercase)
     n_rows = df.to_sql(
         name=temp_table_name,
-        con="sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db",
+        con=db_filepath,
         if_exists="replace"
     )
     
@@ -114,7 +116,7 @@ async def select_from_table(agent, task_id: str, sql_query: str, connection_stri
     metadata = {
         "operation": f"The data retrieved from {sql_query} was loaded into a temporary table. Please use the following information to access the data.",
         "table_name": temp_table_name,
-        "con": "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db",
+        "con": db_filepath,
         "n_rows": n_rows,
         "columns": ["'"+col+"'" for col in df.columns],
         "dtypes": df.dtypes.to_dict(),
@@ -188,12 +190,16 @@ async def pg_to_df_rquery(agent, task_id: str, query: str, database: str = "post
 
 @ability(
     name="build_graph",
-    description="Generate data for building a graph. Use when needing to show a graph using CanvasJS (Angular).",
+    description="Returns data for graph building. Use when needing to show a graph using CanvasJS (Angular). Expects columns to be named X and Y respective to their axes.",
     parameters=[
         {
             "name": "query",
             "type": "string",
-            "description": "The query to be executed to fetch data from a table. Remember to format the column names with double quotes (\") and rename them to X and Y according to their graph axes.",
+            "description": """The query to be executed to fetch data from a table. Remember to format the column names with double quotes (\").
+                            SQL query samples: 
+                            - SELECT "Region" AS X, SUM("Total") AS Y FROM vIVYQrfs GROUP BY "Region";
+                            - SELECT "Category" AS X, SUM("Sales") AS Y FROM NAElthEv GROUP BY "Category";
+                            - SELECT "Month" AS X, COUNT("Orders") AS Y FROM xfwHiRUI GROUP BY "Month";""",
             "required": True,
         }
     ],
@@ -208,8 +214,8 @@ async def build_graph(agent, task_id: str, query: str) -> list:
     Returns:
     A list containing the data to be used on a graph visualization.
     """
-    task = await agent.db.get_task(task_id)
-    df = pd.read_sql(query, "sqlite:////home/jfeli/AutoGPTIE/autogpts/InsightEngineAgent/agent.db")
+    #task = await agent.db.get_task(task_id)
+    df = pd.read_sql(query, db_filepath)
     df = df.astype(str)
     
-    return {'data': df.to_json(orient="records"), 'task': task.input}
+    return {'data': df.to_json(orient="records"), 'task': 'test'}
