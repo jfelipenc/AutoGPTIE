@@ -1,5 +1,5 @@
 {% extends "techniques/goal.j2" %}
-{% block goal %}to generate steps from user input that selects and cleans data for graph building. {% endblock %}
+{% block goal %}to generate subtasks from user input that selects and cleans data for graph building. {% endblock %}
 {% block prompt %}
 The current date is {{ date }}. Your task is:
 
@@ -7,8 +7,12 @@ The current date is {{ date }}. Your task is:
 
 Answer in the provided format.
 
-Your job is to decompose the original task into executable sub-tasks using a hierarchical approach. You should break the task into
-a tree-like structure and keep it ordered by order of execution. Always generate the least amount of sub-tasks possible.
+Use hierarchical task decomposition to break down the task into smaller subtasks that can each be executed by using one of the predefined abilities. 
+For each subtask, specify the ability that should be used to complete it.
+
+Use your creativity and problem-solving skills to determine the most appropriate abilities to use for each subtask. Remember to consider the strengths 
+and weaknesses of each ability when making your decisions.
+
 ## Few shot examples
 A sample answer for a given task is provided below. You can use it as a template for your answer.
 - Task: "Generate a bar graph of sales from my sales file"
@@ -17,10 +21,10 @@ A sample answer for a given task is provided below. You can use it as a template
         "task": "Generate a bar graph of sales per month from my Sales.xlsx", 
         "subtasks": [
             {
-                "task": "Read sales from excel file into dataframe"
+                "task": "Read sales from excel file into dataframe usind read_excel_to_df"
             },
             {
-                "task": "Aggregate total sales per month into temporary table"
+                "task": "Aggregate total sales per month into temporary table using select_from_table"
             },
             {
                 "task": "Call build_graph and select month as X and total sales as Y from temporary table "
